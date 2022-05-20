@@ -1,0 +1,246 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
+ 
+contract charity_platform{
+ 
+ 
+    struct Beneficiary{
+        string Name;// Name of the beneficiary
+        string Desc;// Description about the beneficiary
+        address Address;// Wallet address of the beneficiary
+        uint mtoken_needed;// Money tokens needed
+        uint balance;// Balance of money tokens
+        bool Requirehelp;// If the beneficiary still needs help
+        uint moneyneed;// Money needed in terms of real currency
+        uint ptoken_needed;// Product tokens needed
+        uint hash;// For charity org. to verify transactions b/w the beneficiary and the store
+        uint ptoken_have;// balance of product tokens
+        uint id;// Beneficary id
+    }  
+    struct Store{
+        string Name;// Name of the store
+        string Desc;// Description about the store
+        address Address;// store’s wallet address
+    }  
+ 
+    uint id_b = 0;// initialize beneficiary id
+    uint id_p = 0;// initialize product id
+    string newString = "a";// used for updating secret & hash after transaction
+ 
+ 
+// Keep track of related information of different address
+    mapping(uint => Beneficiary) public beneficiaries;
+    mapping(uint => Store) public stores;
+    mapping(address => uint) donation_usd;
+    mapping(address => uint) donation_mtokens;
+    mapping(address => uint) donation_ptokens;
+    mapping(address=> uint)balance;
+ 
+    address org;// The charity organization’s address
+    uint public max_tokens=100000;// The charity organization’s address
+    uint public usd_to_mytoken = 1;// usd to money token conversion rate
+    uint public usd_to_ptoken=10;// usd to product token conversion rate
+    uint public total_mtokens_sold = 0;// number of  money tokens sold
+    uint public total_ptokens_sold = 0;// number of product tokens sold
+   
+// A modifier requires msg sender to be the charity organization
+    modifier onlyOrg(){
+        require(msg.sender == org, 'You are not the org.');
+        _;
+    }
+ 
+    constructor(uint _max_tokens)  {
+        org = msg.sender;// set the deployer of contract to be the charity organization
+        max_tokens = _max_tokens;// let the deployer of contract set the maximum number of tokens
+    }
+ 
+// Functions for users to get related information
+    function show_donor_usd (address donor) view public returns (uint){
+        return (donation_usd[donor]);
+    }
+    function show_donor_mtokens (address donor) view public returns (uint){
+        return (donation_mtokens[donor]);
+    }
+    function show_donor_ptokens (address donor) view public returns (uint){
+        return (donation_ptokens[donor]);
+    }
+    function show_organisation_balance() view public returns (uint){
+        return (balance[org]);
+    }
+ 
+ 
+    function buy_mtokens(address donor, uint usd_donated) public {
+       
+        // Check the condition: if tokens are available enough
+        require(usd_donated * usd_to_mytoken + total_mtokens_sold <= max_tokens, 'Token supply is not enough. Please try some less amount.');
+        uint mtokens_bought = usd_donated / usd_to_mytoken;
+ 
+        // update mapped data structure for mtokens and donation_usd
+         
+        donation_mtokens[donor] += mtokens_bought;
+         
+        donation_usd[donor] += usd_donated;
+ 
+            // update the amount of total sold tokens
+         
+        total_mtokens_sold += mtokens_bought;
+        balance[org]+=usd_donated;
+        donation_mtokens[org]=total_mtokens_sold;
+   
+    }
+    function buy_ptokens(address donor, uint usd_donated) public {
+       
+        // Check the condition: if tokens are available enough
+        require(usd_donated / usd_to_ptoken + total_ptokens_sold <= max_tokens, 'Token supply is not enough. Please try some less amount.');
+        uint ptokens_bought = usd_donated / usd_to_ptoken;
+ 
+        // update mapped data structure for donation_ptokens and donation_usd
+         
+        donation_ptokens[donor] += ptokens_bought;
+         
+        donation_usd[donor] += usd_donated;
+ 
+        // update the amount of total sold tokens
+         
+        total_ptokens_sold += ptokens_bought;
+        balance[org]+=usd_donated;
+        donation_ptokens[org]=total_ptokens_sold;
+   
+    }
+ 
+    function sell_mtokens(address donor, uint mtokens_sold) public {
+    // Check if donors has enough tokens that he is trying to sell,
+        require(mtokens_sold<=donation_mtokens[donor], 'Tx Failed. You do not have enough coins.');
+        // update variables
+        donation_mtokens[donor] -= mtokens_sold;
+        donation_usd[donor] -= mtokens_sold* usd_to_mytoken;
+        total_mtokens_sold -= mtokens_sold;
+        balance[org]-=mtokens_sold* usd_to_mytoken;
+        donation_mtokens[org]=total_mtokens_sold;
+   
+   
+    }  
+    function sell_ptokens(address donor, uint ptokens_sold) public {
+    // Check if donors has enough tokens that he is trying to sell,
+        require(ptokens_sold<=donation_ptokens[donor], 'Tx Failed. You do not have enough coins.');
+        // update variables
+        donation_ptokens[donor] -= ptokens_sold;
+        donation_usd[donor] -= ptokens_sold* usd_to_ptoken;
+        total_ptokens_sold -= ptokens_sold;
+        balance[org]-=ptokens_sold * usd_to_ptoken;
+        donation_ptokens[org]=total_ptokens_sold;
+   
+   
+    }
+// This function adds beneficiary’s info to the database
+    function add_beneficiary(string memory _Name,
+                                string memory _Desc,
+                                address _Address,
+                                uint _mtokenneed,
+                                uint _ptokenneed,
+                                uint _moneyneed,
+                                uint _hash)
+                                public onlyOrg
+                                {
+            beneficiaries[id_b] = Beneficiary({
+                Name: _Name,
+                Desc: _Desc,
+                Address: _Address,
+                mtoken_needed: _mtokenneed,
+                ptoken_needed: _ptokenneed,
+                ptoken_have: 0,
+                moneyneed:_moneyneed,
+                balance:0,
+                hash:_hash,
+                id: id_b,
+                Requirehelp: true
+            });
+            id_b += 1;// update the next available id
+       
+    }
+// This function adds store’s info to the database
+    function add_store(string memory _Name,
+                                string memory _Desc,
+                                address _Address)
+                                public onlyOrg
+                                {
+            stores[id_p] = Store({
+                Name: _Name,
+                Desc: _Desc,
+                Address: _Address
+            });
+            id_p += 1;// update the next available id
+       
+    }
+ 
+// For transfer money tokens to the beneficiary
+    function transfer_mtoB(address donor, uint B_id, uint token_donation) public{
+// Check different conditions for making donations
+        require(0<beneficiaries[B_id].mtoken_needed, 'This beneficiary has already gotten help');
+        require(token_donation<=beneficiaries[B_id].mtoken_needed, 'Too much mtoken! Please check the mtoken_needed for the beneficiary ');
+        require(token_donation<=donation_mtokens[donor], 'Not enough mtoken!');
+// update the info of beneficiary, org and donor
+        beneficiaries[B_id].mtoken_needed -= token_donation;
+        beneficiaries[B_id].moneyneed -= token_donation*usd_to_mytoken;
+        beneficiaries[B_id].balance += token_donation*usd_to_mytoken;
+        donation_mtokens[donor] -= token_donation;
+        donation_mtokens[org]-=token_donation;
+        balance[org]-=token_donation*usd_to_mytoken;
+        donation_usd[donor]-=token_donation*usd_to_mytoken;
+        total_mtokens_sold -= token_donation;
+    }
+ 
+// For transfer product tokens to the beneficiary
+    function transfer_ptoB(address donor, uint B_id, uint token_donation) public{
+// Check different conditions for making donations
+        require(0<beneficiaries[B_id].ptoken_needed, 'This beneficiary has already gotten help');
+        require(token_donation<=beneficiaries[B_id].ptoken_needed, 'Too much mtoken! Please check the ptoken_needed for the beneficiary ');
+        require(0<=donation_ptokens[donor]-token_donation, 'Not enough ptoken! ');
+// update the info of beneficiary, org and donor
+        beneficiaries[B_id].ptoken_needed -= token_donation;
+        beneficiaries[B_id].ptoken_have+=token_donation;
+        donation_ptokens[donor] -= token_donation;
+        donation_ptokens[org]-=token_donation;
+        donation_ptokens[beneficiaries[B_id].Address]+=token_donation;
+        donation_usd[donor]-=token_donation*usd_to_ptoken;
+ 
+ 
+    }
+ 
+// This function allows stores to verify beneficiaries’ identity
+    function check_validhash(uint B_id,string memory _secret)view public returns (bool){
+        uint hashDigits = 8;
+        uint hashModulus = 10 ** hashDigits;
+        uint random =
+             uint(keccak256(abi.encodePacked(_secret))) % hashModulus;
+        if(random==beneficiaries[B_id].hash) return true;
+        else return false;}
+ 
+// This function allows the org to create hash for beneficiaries  
+    function create_hash(string memory _secret)view public onlyOrg returns (uint){
+        uint hashDigits = 8;
+        uint hashModulus = 10 ** hashDigits;
+        uint random =
+             uint(keccak256(abi.encodePacked(_secret))) % hashModulus;
+        return random;}
+ 
+// This function allows stores to get money from org. with product tokens and the secret of the beneficiary
+    function store_transfer(uint S_id,uint B_id,string memory _secret,uint ptoken_received)public{
+        require(0<donation_ptokens[beneficiaries[B_id].Address], 'Invalid Transaction. Beneficiary has been helped');// checking the amount of ptokens of beneficiary is enough/not
+        uint hashDigits = 8;
+        uint hashModulus = 10 ** hashDigits;
+        uint random =
+             uint(keccak256(abi.encodePacked(_secret))) % hashModulus;
+        require(random==beneficiaries[B_id].hash, 'Wrong secret_value or wrong id of beneficiary!');//check the secret matches the hash or not
+        donation_ptokens[beneficiaries[B_id].Address]-=ptoken_received;
+        beneficiaries[B_id].ptoken_have-=ptoken_received;
+        balance[stores[S_id].Address]+=ptoken_received*usd_to_ptoken;
+        balance[org]-=ptoken_received*usd_to_ptoken;
+        total_ptokens_sold -= ptoken_received;
+        _secret=string.concat(_secret,newString);
+        beneficiaries[B_id].hash=uint(keccak256(abi.encodePacked(_secret))) % hashModulus;// updating the secret and the hash of the beneficiary
+ 
+    }
+ 
+ 
+}
